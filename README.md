@@ -1,136 +1,121 @@
-# Banjo: Recompiled
-Banjo: Recompiled is a project that uses [N64: Recompiled](https://github.com/N64Recomp/N64Recomp) to **statically recompile** Banjo-Kazooie into a native port with many new features, enhancements, and extensive mod support. This project uses [RT64](https://github.com/rt64/rt64) as the rendering engine to provide graphical enhancements.
+# Banjo: Recompiled — Android
 
-### [Check out the latest release here](https://github.com/BanjoRecomp/BanjoRecomp/releases/latest).
+The Android version of [Banjo: Recompiled](https://github.com/BanjoRecomp/BanjoRecomp): Banjo-Kazooie, statically
+recompiled, running natively on Android with touch buttons, full controller support and RetroArch shaders. Made
+for Android handhelds with a built-in controller and for phones. Tested on the **AYN Odin 2 Portal** (Snapdragon 8
+Gen 2, 1920×1080, Android 13).
 
-Join the [N64: Recompiled Community Discord](https://discord.gg/AWZThJ4dPf) to discuss this and other N64: Recompiled projects!
+> **This is not a project of the Banjo: Recompiled team**, and it was made with AI assistance (see below), which
+> the Banjo: Recompiled team does not use and does not accept in contributions. Please don't report problems of
+> this Android version to them: use this repository's [Issues](../../issues).
 
-[![Discord Invitation](https://discordapp.com/api/guilds/1374083583739826328/widget.png?style=banner2 'N64 Recomp')](https://discord.gg/AWZThJ4dPf)
+This repository is a fork of the main project: branch `main` follows upstream, branch `android` (the default) is
+the Android port. Its Android layer comes from this account's
+[Donkey Kong 64: Recompiled Android port](https://github.com/almost-drowned-rat/Donkey-Kong-64-Recompiled-Android)
+(DK64: Recompiled is built the same way as Banjo: Recompiled). The main project's README is kept as
+[README-UPSTREAM.md](README-UPSTREAM.md).
 
-### **This repository and its releases do not contain game assets. The original game is required to build or run this project.**
+> ⚠️ **No game files.** The app contains only this project's code. You need your own legally obtained ROM of
+> **Banjo-Kazooie (USA) 1.0** (NTSC-U, not Rev 1), sha1 `1fe1632098865f639e22c11b9a81ee8f29c75d7a`.
 
-### No-AI stance
-**The Banjo: Recompiled team has not, does not, and will not use generative AI tools in the development of this project for any purpose. As per the CONTRIBUTING.md file, contributions that use any GenAI tooling in any capacity are blanket banned.**
+## Install
 
-## Table of Contents
-* [System Requirements](#system-requirements)
-* [Features](#features)
-  * [Plug and Play](#plug-and-play)
-  * [Fully Intact N64 Effects](#fully-intact-n64-effects)
-  * [Faithful Audio](#faithful-audio)
-  * [Easy-to-Use Menus](#easy-to-use-menus)
-  * [High Framerate Support](#high-framerate-support)
-  * [Widescreen and Ultrawide Support](#widescreen-and-ultrawide-support)
-  * [Mod Support](#mod-support)
-  * [Dual Analog Camera](#dual-analog-camera)
-  * [Note Saving](#note-saving)
-  * [Low Input Lag](#low-input-lag)
-  * [Instant Load Times](#instant-load-times)
-  * [Linux and Steam Deck Support](#linux-and-steam-deck-support)
-* [Planned Features](#planned-features)
-* [FAQ](#faq)
-* [Known Issues](#known-issues)
-* [Building](#building)
-* [Libraries Used and Projects Referenced](#libraries-used-and-projects-referenced)
+1. Download the `.apk` from the [Releases](../../releases) page and open it on the device (allow installing apps
+   from your browser or file manager when Android asks).
+2. Start **Banjo: Recompiled** and choose **Load ROM**: Android's file picker opens; pick your ROM. It is checked,
+   copied into the app and the game starts.
 
-## System Requirements
-A GPU supporting Direct3D 12.0 (Shader Model 6), Vulkan 1.2, or Metal Argument Buffers Tier 2 support is required to run this project. The oldest GPUs that should be supported for each vendor are:
-* GeForce GT 630
-* Radeon HD 7750 (the one from 2012, not to be confused with the RX 7000 series) and newer
-* Intel HD 510 (Skylake)
-* A Mac with Apple Silicon or an Intel 7th Gen CPU with MacOS 13.0+
+Updates install over the previous version and keep your saves. To get them automatically, add this repository to
+[Obtainium](https://github.com/ImranR98/Obtainium) (`https://github.com/almost-drowned-rat/BanjoRecomp-Android`).
 
-On x86-64 PCs, a CPU supporting the SSE4.1 instruction set is also required (Intel Core 2 Penryn series or AMD Bulldozer and newer). ARM64 builds will work on any ARM64 CPU.
+Needs Android 8.0 or newer, a 64-bit (arm64) device and a GPU with Vulkan. App ID
+`io.github.almostdrownedrat.banjo` — it installs next to other Banjo apps.
 
-If you have issues with crashes on startup, make sure your graphics drivers are fully up to date. 
+## Controls
 
-## Features
+- **Controller**: works out of the box (built-in handheld controls or a Bluetooth / USB pad); set it up in the
+  game's settings (Controls).
+- **Touch buttons** (N64 layout: stick, A, B, Z, L, R, START, C buttons; D-pad hidden by default). **Automatic**
+  hides them while a controller is used and a touch brings them back; **Always** and **Off** are the other modes.
+- **Back** (the back gesture, the system bar's back button or a handheld's own Back key) opens the menu over the
+  game, fully usable with the controller (D-pad / stick, **A** choose, **B** back, holding the D-pad keeps moving):
+  - **Back to the game**
+  - **Game settings and controller** — the game's own settings
+  - **FPS / frame time** — a small readout in the corner
+  - **Touch controls** — mode, move and resize, size, single buttons, opacity, stick sensitivity, reset
+  - **Exit game**
 
-#### Plug and Play
-Simply provide your copy of the North American 1.0 version of the game in the main menu and start playing! This project will automatically load assets from the provided copy, so there is no need to go through a separate extraction step or build the game yourself.
+  With the game's settings open, Back closes them. In all menus **Y** sets the selected setting back to its
+  default; graphics settings are applied with **Start**.
 
-#### Fully Intact N64 Effects
-All advanced graphical effects, such as the jigsaw puzzle screen transition and Bottles' Moving Picture Game are fully intact and have been adapted for widescreen and high framerates. Fine details such as the game's original mipmapping preserved with a high degree of accuracy.
+Holding A to jump higher works once Bottles has taught it (the first molehill in Spiral Mountain), as on the N64.
 
-#### Faithful Audio
-Music and sounds are perfectly faithful to the original N64 version of game, with all audio processing intact and no popping or stuttering. Scenes that synchronize audio to visuals have their timings corrected to ensure they remain synchronized as they did on original hardware.
+## Android settings
 
-#### Easy-to-Use Menus
-Gameplay settings, graphics settings, input mappings, and audio settings can all be configured with the in-game config menu. The menus can all be used with mouse, controller, or keyboard for maximum convenience.
+Settings > **Android Options** (after Graphics); each line shows what is in use beside it:
 
-#### High Framerate Support
-Play at any framerate you want thanks to functionality provided by RT64! Game objects and terrain, texture scrolling, screen effects, and all HUD elements are all rendered at high framerates. By default, this project is configured to run at your monitor's refresh rate. You can also play at the original framerate of the game if you prefer. **Changing framerate has no effect on gameplay.**
+- **Shader...** — RetroArch shaders (librashader). None are shipped: **Import shader pack (.zip)** takes a slang
+  shader pack such as [libretro/slang-shaders](https://github.com/libretro/slang-shaders)' "Download ZIP"; its
+  folders and presets are then listed to pick from.
+- **Shader Resolution** — the size of the picture the shader works on: **Original** (the N64's 240 lines, as in
+  RetroArch — the look the shaders were made for and by far the lightest), **2x** or **Full**.
+- **Shader parameters...** — the active preset's settings (kept per preset).
+- **GPU Driver (Turnip)...** — installs a Turnip driver package (`.zip`) or goes back to the system driver; the
+  app restarts. On Snapdragon (Adreno) GPUs Turnip draws the whole frame at once, which avoids tile glitches.
 
-**Note**: External framerate limiters (such as the NVIDIA Control Panel) are known to potentially cause problems, so if you notice any stuttering then turn them off and use the manual framerate slider in the in-game graphics menu instead.
+There are no window mode options (always full screen), and the right stick scrolls the menus.
 
-#### Widescreen and Ultrawide Support
-Any aspect ratio is supported, with all effects modded to work correctly in widescreen. The HUD can also be positioned at 16:9 when using ultrawide aspect ratios if preferred. Game models have been extended where necessary to ensure cutscenes work correctly in 16:9 aspect ratio. Cutscenes can also be optionally pillarboxed to 16:9 or the game's original aspect ratio to hide any details that weren't meant to be visible.
+## Fixes for Android
 
-#### Mod Support
-Install community made mods and texture packs! Mods can change any part of the game, including adding completely new features and content. You can install mods by simply dragging the mod files onto the game window before starting the game or by clicking the **Install Mods** button in the mod menu. Mods can be toggled in the mod menu, and some mods can be configured there as well.
+- **Code mods** (`.nrm`, e.g. the Asset Expansion Pak, translations): Android doesn't let the app make a hooked code
+  page executable again; the hooked pages are swapped for anonymous copies, patches that cross a page boundary are
+  handled and the instruction cache is flushed — Rival's fix from
+  [AurelioB/N64ModernRuntime#1](https://github.com/AurelioB/N64ModernRuntime/pull/1).
+- **GPUs without dual source blending** (every Mali GPU): the renderer takes the same fallbacks as on Qualcomm's
+  driver instead of failing every alpha blended draw (white or missing textures).
+- Audio crackling and pitch jumps fixed; real full screen.
 
-Many mods are available on the project's Thunderstore page: https://thunderstore.io/c/banjo-recompiled/. The Thunderstore mod manager/r2modman is not required or supported, so simply download the mods directly from the website.
+## Known issues
 
-If you're interested in making mods for this project, check out [the mod template](https://github.com/BanjoRecomp/BKRecompModTemplate) and [the modding documentation](https://hackmd.io/fMDiGEJ9TBSjomuZZOgzNg). If you're interested in making texture packs, check out [the RT64 documentation](https://github.com/rt64/rt64/blob/main/TEXTURE-PACKS.md). You can also join the [N64: Recompiled Modding Discord server](https://discord.gg/Z8Nbm455D4).
+- Not tested on a Mali GPU or with every mod yet.
+- With the system driver, Android's screen recording can make the GPU hang after a moment.
 
-#### Dual Analog Camera
-Play with a dual analog control for finer camera control! When this option is enabled, the right analog stick will control the camera. Buttons mapped to the right analog stick will still work while crouching, so you can keep the C-buttons mapped to it even when this setting is enabled.
-
-#### Note Saving
-Keep your notes when leaving a level or dying like in later releases of the game!
-
-This setting can be turned off to restore the N64 version's note score mechanic. Changing this setting will only take effect when returning to Grunty's Lair or restarting the game.
-
-#### Low Input Lag
-This project has been optimized to have as little input lag as possible, making the game feel more responsive than ever!
-
-#### Instant Load Times
-Saving and loading files, going from place to place, and pausing all happen in the blink of an eye thanks to the game running natively on modern hardware.
-
-#### Linux and Steam Deck Support
-A Linux binary as well as a Flatpak is available for playing on most up-to-date distros, including on the Steam Deck.
-
-To play on Steam Deck, extract the Linux build onto your deck. Then, in desktop mode, right click the BanjoRecompiled executable file and select "Add to Steam". From there, you can return to Gaming mode and configure the controls as needed.
-
-## Planned Features
-* Ray Tracing via RT64
-
-## FAQ
-
-#### What is static recompilation?
-Static recompilation is the process of automatically translating an application from one platform to another. For more details, check out the full description of how this project's recompilation works here: [N64: Recompiled](https://github.com/Mr-Wiseguy/N64Recomp).
-
-#### How is this related to the decompilation project?
-Unlike N64 ports in the past, this project is not based on the source code provided by a decompilation of the game. This is because static recompilation bypasses the need for decompiled source code when making a port, allowing ports to be made **without source code**. However, the reverse engineering work done by the decompilation team was invaluable for providing some of the enhancements featured in this project. For this reason, the project uses headers and some functions from the decompilation project in order to make modifications to the game. Many thanks to the decompilation team for all of the hard work they've done.
-
-#### Where is the savefile stored?
-- Windows: `%LOCALAPPDATA%\BanjoRecompiled\saves`
-- Linux: `~/.config/BanjoRecompiled/saves`
-- macOS: `~/Library/Application Support/BanjoRecompiled/saves`
-
-#### How do I choose a different ROM?
-**You don't.** This project is **only** a port of Banjo-Kazooie, and it will only accept one specific ROM: the US 1.0 version of the N64 release of Banjo-Kazooie. ROMs in formats other than .z64 will be automatically converted, as long as it is the correct ROM. **This is not an emulator, and it cannot run any arbitrary ROM.**
-
-Instead, you can change the game by installing mods. See the [mod support](#mod-support) section for details.
-
-#### Can you run this project as a portable application?
-Yes, if you place a file named `portable.txt` in the same folder as the executable then this project will run in portable mode. In portable mode, the save files, config files, and mods are placed in the same folder as the executable.
-
-#### Were the duplicate Mumbo token IDs in the original game fixed?
-Yes. The incorrect Mumbo tokens now use previously unused token IDs. This won't affect mods that replace levels.
-
-#### Does note saving have the same issue as the XBLA version where it collects notes during Bottles' puzzles and prevents you from getting 100% completion?
-No. Care has been taken to ensure that notes are not saved during demos. 
-
-## Known Issues
-* Overlays such as MSI Afterburner and other software such as Wallpaper Engine can cause performance issues with this project that prevent the game from rendering correctly. Disabling such software is recommended.
+Report problems on this repository's [Issues](../../issues) page, with the device, Android version and GPU driver.
 
 ## Building
-Building is not required to play this project, as prebuilt binaries (which do not contain game assets) can be found in the [Releases](https://github.com/BanjoRecomp/BanjoRecomp/releases) section. Instructions on how to build this project can be found in the [BUILDING.md](BUILDING.md) file.
 
-## Libraries Used and Projects Referenced
-* [N64Recomp](https://github.com/N64Recomp/N64Recomp) for statically recompiling the game's code to run natively
-* [RT64](https://github.com/rt64/rt64) for the project's rendering engine
-* [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) for replacing the original N64 runtime libraries and providing mod support
-* [RecompFrontend](https://github.com/N64Recomp/RecompFrontend) for menus and input handling
-* [Banjo-Kazooie Decompilation](https://gitlab.com/banjo.decomp/banjo-kazooie) for headers and some function definitions, used for making patches or some enhancements
+On Linux: decompress your ROM and generate the game code as described in [BUILDING.md](BUILDING.md) (N64Recomp,
+RSPRecomp, the MIPS patches — with clang 21 or newer add `-Wno-error=incompatible-pointer-types`), build
+`lib/rt64/src/tools/file_to_c` for the host, apply the patches in [android/patches](android/patches) to the
+submodules (`git -C <submodule> apply`), then build the APK with
+`./gradlew assembleRelease -PHOST_FILE_TO_C=<path to file_to_c>` in `android/` (NDK, JDK 21).
+
+## AI assistance
+
+The changes in this Android version were made with AI assistance ([Claude Code](https://claude.com/claude-code)).
+Planning, testing on the device and the decision what gets released are by the repository owner. Use at your own
+risk. This applies only to this version's own changes, not to the code of the original projects.
+
+## Credits and license
+
+- [BanjoRecomp/BanjoRecomp](https://github.com/BanjoRecomp/BanjoRecomp) — Banjo: Recompiled (see
+  [README-UPSTREAM.md](README-UPSTREAM.md) for its team and credits)
+- [deivid22srk/dk64-recomp-android](https://github.com/deivid22srk/dk64-recomp-android) — the Android layer this
+  version's DK64 port started from (NDK build, SDLActivity integration, SAF file bridge, libadrenotools / Turnip,
+  lifecycle)
+- Rival — the code mod fix ([AurelioB/N64ModernRuntime#1](https://github.com/AurelioB/N64ModernRuntime/pull/1),
+  for [AurelioB/BanjoRecomp-Android#15](https://github.com/AurelioB/BanjoRecomp-Android/issues/15))
+- [ogdanimal/Goemon64Recomp-Android](https://github.com/ogdanimal/Goemon64Recomp-Android) — found the Mali cause
+  (dual source blending)
+- [N64Recomp](https://github.com/N64Recomp/N64Recomp) and [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime)
+  by Mr-Wiseguy, [RecompFrontend](https://github.com/N64Recomp/RecompFrontend)
+- [RT64](https://github.com/rt64/rt64) by Dario (DarioSamo), with [plume](https://github.com/renderbag/plume)
+- [Banjo-Kazooie decompilation](https://gitlab.com/banjo.decomp/banjo-kazooie)
+- [librashader](https://github.com/SnowflakePowered/librashader) by SnowflakePowered (MPL-2.0 / GPL-3.0)
+- [libadrenotools](https://github.com/bylaws/libadrenotools) by bylaws — custom Vulkan drivers
+- [SDL2](https://www.libsdl.org/), [RmlUi](https://github.com/mikke89/RmlUi) and the other libraries in the
+  submodules
+
+License: GPL-3.0, see [COPYING](COPYING). The source code of all changes is in this repository.
+
+*Fan project, not affiliated with Nintendo, Rare or Microsoft. Banjo-Kazooie is © Microsoft / Rare.*

@@ -239,6 +239,7 @@ static void set_control_descriptions() {
     recompinput::set_game_input_description(recompinput::GameInput::DPAD_DOWN, "Unused. Mods may use it for additional features.");
     recompinput::set_game_input_description(recompinput::GameInput::DPAD_LEFT, "Unused. Mods may use it for additional features.");
     recompinput::set_game_input_description(recompinput::GameInput::DPAD_RIGHT, "Unused. Mods may use it for additional features.");
+
 }
 
 banjo::CutsceneAspectRatioMode banjo::get_cutscene_aspect_ratio_mode() {
@@ -265,6 +266,33 @@ void banjo::init_config() {
 
     set_control_defaults();
     set_control_descriptions();
+#ifdef __ANDROID__
+    // Settings > Android Options (after Graphics): the shader resolution; main.cpp adds the buttons for the shader
+    // pages of the menu Back opens and the GPU driver.
+    {
+        auto &android_config = recompui::config::create_config_tab("Android Options", "android_options", false);
+        using EnumOptionVector = const std::vector<recomp::config::ConfigOptionEnumOption>;
+        static EnumOptionVector shader_resolution_options = {
+            {0, "Original", "Original"},
+            {1, "2x", "2x"},
+            {2, "Full", "Full"}
+        };
+        android_config.add_enum_option(
+            "shader_resolution",
+            "Shader Resolution",
+            "The size of the game's picture a RetroArch shader works on. "
+            "<recomp-color primary>Original</recomp-color>: the N64's 240 lines, as in RetroArch - the look the shaders "
+            "were made for (scanlines, CRT masks, pixel upscalers) and by far the lightest. "
+            "<recomp-color primary>2x</recomp-color>: twice that. "
+            "<recomp-color primary>Full</recomp-color>: the window's size - heavy shaders get slow.<br /><br />"
+            "<b>Shader...</b> imports shader packs (.zip) and picks a preset, <b>Shader parameters...</b> changes "
+            "the preset's settings, <b>GPU Driver (Turnip)...</b> installs a Vulkan driver (the app restarts).",
+            shader_resolution_options,
+            0u,
+            true   // shown as a button (src/main/main.cpp)
+        );
+    }
+#endif
     recompui::config::create_controls_tab();
 
     auto &sound_config = recompui::config::create_sound_tab();
@@ -275,3 +303,4 @@ void banjo::init_config() {
     recompui::config::finalize();
 
 }
+

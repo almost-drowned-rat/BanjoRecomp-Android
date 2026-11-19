@@ -7,13 +7,29 @@
 #include <numeric>
 #include <stdexcept>
 #include <cinttypes>
+#include <thread>
 
 #include "nfd.h"
+
+#ifdef __ANDROID__
+// No Android o main() é o SDL_main invocado pelo SDLActivity (System.loadLibrary("main")),
+// então NÃO definimos SDL_MAIN_HANDLED e usamos os argv injetados pelo getArguments().
+#include <stdlib.h>
+#include "SDL_main.h"
+#include "android_paths.h"
+#include "custom_driver.h"
+#include "file_bridge.h"
+#include "app_restart.h"
+#include "crash_handler.h"
+#include "virtual_pad.h"
+#include "recompinput/input_state.h"
+#else
+#define SDL_MAIN_HANDLED
+#endif
 
 #include "ultramodern/ultra64.h"
 #include "ultramodern/ultramodern.hpp"
 #include "ultramodern/config.hpp"
-#define SDL_MAIN_HANDLED
 #ifdef _WIN32
 #include "SDL.h"
 #else
@@ -146,7 +162,7 @@ bool SetImageAsIcon(const char* filename, SDL_Window* window)
             stbi_image_free(data);
         }
         return false;
-	} else {
+        } else {
         SDL_SetWindowIcon(window,surface);
         SDL_FreeSurface(surface);
         stbi_image_free(data);
@@ -172,6 +188,18 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
         exit_error("Failed to create window: %s\n", SDL_GetError());
     }
 
+#if defined(__ANDROID__)
+    // Port DK64-Recomp Android: tela cheia imersiva. Sem isto o SDLActivity
+    // mantém a status bar e os insets de corte/gesto reservados e o swapchain
+    // nasce menor que a tela (barras pretas nas laterais, menu não preenche o
+    // display 20:9). SDL_WINDOW_FULLSCREEN_DESKTOP faz o SDLActivity nativo
+    // aplicar SYSTEM_UI_FLAG_IMMERSIVE_STICKY (COMMAND_CHANGE_WINDOW_STYLE ->
+    // setWindowStyle) e re-hidratar as barras automaticamente (rehideSystemUi)
+    // quando o usuário desliza a borda. O MainActivity complementa com
+    // layoutInDisplayCutoutMode=SHORT_EDGES (recorte da câmera em paisagem).
+    SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+#endif
+
     SDL_SysWMinfo wmInfo;
     SDL_VERSION(&wmInfo.version);
     SDL_GetWindowWMInfo(window, &wmInfo);
@@ -181,7 +209,7 @@ ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::
     bool choose_kazooie_icon = (rand() % 2 == 0);
     HICON new_icon = LoadIcon(GetModuleHandle(NULL), choose_kazooie_icon ? MAKEINTRESOURCE(APP_ICON_K) : MAKEINTRESOURCE(APP_ICON_B));
     SendMessage(wmInfo.info.win.window, WM_SETICON, ICON_SMALL2, (LPARAM)(new_icon));
-#elif defined(__linux__)
+#elif defined(__gnu_linux__)
     SetImageAsIcon("icons/app.png", window);
 #endif
 
@@ -264,13 +292,22 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
         throw std::runtime_error("Error using SDL audio converter");
     }
 
-    uint64_t cur_queued_microseconds = uint64_t(SDL_GetQueuedAudioSize(audio_device)) / bytes_per_frame * 1000000 / sample_rate;
+    // The queue holds output frames, so convert with the output sample rate. Using the input rate here overestimated
+    // the queued time by output_sample_rate / sample_rate (2.2x at 22050 Hz), so samples were skipped
+    // (audible pitch jumps) already at ~46 ms instead of 100 ms, after which the queue ran dry (crackling).
+    uint64_t cur_queued_microseconds = uint64_t(SDL_GetQueuedAudioSize(audio_device)) / bytes_per_frame * 1000000 / output_sample_rate;
     uint32_t num_bytes_to_queue = audio_convert.len_cvt - output_channels * discarded_output_frames * sizeof(swap_buffer[0]);
     float* samples_to_queue = swap_buffer.data() + output_channels * discarded_output_frames / 2;
 
     // Prevent audio latency from building up by skipping samples in incoming audio when too many samples are already queued.
     // Skip samples based on how many microseconds of samples are queued already.
+#ifdef __ANDROID__
+    // Handheld-Fork: with the larger margin in get_frames_remaining the queue peaks slightly above 100 ms;
+    // only skip from 200 ms on, so those peaks don't cause audible pitch jumps.
+    uint32_t skip_factor = cur_queued_microseconds / 200000;
+#else
     uint32_t skip_factor = cur_queued_microseconds / 100000;
+#endif
     if (skip_factor != 0) {
         uint32_t skip_ratio = 1 << skip_factor;
         num_bytes_to_queue /= skip_ratio;
@@ -286,7 +323,13 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
 }
 
 size_t get_frames_remaining() {
+#ifdef __ANDROID__
+    // Handheld-Fork: the game delivers audio in irregular bursts on Android; with a one-VI margin the queue
+    // regularly ran dry between chunks (crackling). Keep three VIs of margin instead.
+    constexpr float buffer_offset_frames = 3.0f;
+#else
     constexpr float buffer_offset_frames = 1.0f;
+#endif
     // Get the number of remaining buffered audio bytes.
     uint64_t buffered_byte_count = SDL_GetQueuedAudioSize(audio_device);
 
@@ -573,6 +616,124 @@ void reorder_texture_pack(recomp::mods::ModContext&) {
     recompui::renderer::trigger_texture_pack_update();
 }
 
+#ifdef __ANDROID__
+// The shader pass (shaderpass/rt64): Shader Resolution from the graphics settings.
+namespace RT64 { void setShaderResolution(int mode); }
+void android_open_shader_menu(int which);   // virtual_pad.cpp
+std::string android_shader_name();          // virtual_pad.cpp
+std::string android_shader_params_summary();
+void android_reset_shader(int which);       // virtual_pad.cpp: 0 = shader Off, 1 = default parameters
+#endif
+
+#ifdef __ANDROID__
+/*
+ * Menu "GPU Driver" do launcher (Android) — substitui a tela Java de setup
+ * removida: o usuário instala/remove o driver Turnip direto pela UI do jogo.
+ *
+ * Fluxo (tudo na thread de render, dentro do callback do GameOption):
+ *   1. SDL_ShowMessageBox modal com o status atual e os botões
+ *      [Install .zip...] [Use system driver] [Cancel] — diálogo da PRÓPRIA
+ *      Activity (AlertDialog do SDL), sem troca de Activity: seguro segurar
+ *      o contexto do menu aqui.
+ *   2. "Install" abre o DocumentsUI via file_bridge (não-bloqueante — a
+ *      Activity vai a pausa atrás do DocumentsUI e o resultado chega pelo
+ *      draw_hook quando o app volta; ver file_bridge.h).
+ *   3. O resultado (instalação + probe Vulkan, feito pelo Java em background)
+ *      volta como payload e é mostrado numa caixa informativa.
+ *   4. Após install/remove, o app É REINICIADO (ver nota abaixo) — clicar
+ *      "Start Game" sem reiniciar é o bug original.
+ *
+ * POR QUE O APP PRECISA REINICIAR APÓS TROCAR O DRIVER:
+ *   o plume/RT64 inicializa o Vulkan UMA VEZ por processo, no construtor de
+ *   plume::VulkanInterface (chamado em rt64_application.cpp::createDeviceInterface
+ *   na primeira criação de swapchain). Lá, volkInitializeCustom é invocado com
+ *   o vkGetInstanceProcAddr do driver resolvido no INÍCIO do processo (via
+ *   dk64_adrenotools_get_instance_proc_addr, definida em custom_driver.cpp).
+ *   Se o usuário instala/remove o driver pelo menu, a VkInstance ativa já
+ *   existe, vinculada ao driver ANTERIOR. Recarregar o adrenotools nessa
+ *   hora injeta os hooks (libmain_hook.so) que redirecionam dlopen("vulkan.adreno.so")
+ *   para o novo driver, mas a VkInstance/device/swapchain ativos continuam
+ *   amarrados ao driver anterior — qualquer operação subsequente (recriar
+ *   device, recriar swapchain) é um SIGSEGV (visto no log
+ *   01_09-19-34-08_380.log: vkCreateGraphicsPipelines falhando, depois
+ *   vkAllocateDescriptorSets falhando, depois crash no thread [Game] MAIN).
+ *   A única solução robusta é reiniciar o processo: o MainActivity.onDestroy
+ *   já mata o processo (Process.killProcess) para zerar estáticos, e o
+ *   launcher do Android reabre o app em cold start, com o driver novo lido
+ *   de files/driver/selected.txt.
+ */
+namespace {
+void request_app_restart_after_delay(int delay_ms) {
+    /*
+     * Dispara o pedido de reinício num pequeno delay para que o SDL tenha
+     * tempo de processar o retorno da SDL_ShowSimpleMessageBox (que mostrou
+     * o resultado) e voltar ao loop de eventos antes de finalizar a Activity.
+     * Sem o delay, finish() roda dentro do callback da MessageBox, o que
+     * pode travar a UI thread em alguns Androids.
+     */
+    std::thread([delay_ms]() {
+        if (delay_ms > 0) std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        dk64::native_request_app_restart();
+    }).detach();
+}
+} // namespace
+
+void show_android_gpu_driver_menu() {
+    const std::string status = dk64driver::status_text();
+
+    SDL_MessageBoxButtonData buttons[3]{};
+    int num_buttons = 0;
+    const int ID_INSTALL = 1;
+    const int ID_RESET = 2;
+    const int ID_CANCEL = 0;
+
+    buttons[num_buttons++] = { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, ID_INSTALL, "Install driver (.zip)..." };
+    if (dk64_adrenotools_custom_driver_active()) {
+        buttons[num_buttons++] = { 0, ID_RESET, "Use system driver" };
+    }
+    buttons[num_buttons++] = { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, ID_CANCEL, "Cancel" };
+
+    SDL_MessageBoxData data{};
+    data.flags = SDL_MESSAGEBOX_INFORMATION;
+    data.title = "GPU Driver";
+    data.message = status.c_str();
+    data.numbuttons = num_buttons;
+    data.buttons = buttons;
+
+    int buttonid = -1;
+    if (SDL_ShowMessageBox(&data, &buttonid) != 0) {
+        fprintf(stderr, "SDL_ShowMessageBox failed: %s\n", SDL_GetError());
+        return;
+    }
+
+    if (buttonid == ID_INSTALL) {
+        androidport::filedialog::request(androidport::filedialog::Kind::DriverZip,
+            [](bool ok, const std::string& payload) {
+                if (ok) {
+                    // Sucesso: avisa que o driver foi instalado E que o app
+                    // vai reiniciar para aplicá-lo. SEM o restart, o RT64
+                    // continua rodando com o driver da inicialização (ver
+                    // nota acima) e o próximo Start Game crasha.
+                    const std::string full = payload
+                        + "\n\nThe app will now restart to load the new driver.";
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,
+                        "GPU Driver", full.c_str(), nullptr);
+                    request_app_restart_after_delay(800);
+                } else {
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+                        "GPU Driver", payload.c_str(), nullptr);
+                }
+            });
+    } else if (buttonid == ID_RESET) {
+        dk64driver::reset_selection();
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "GPU Driver",
+            "Custom driver removed.\nThe app will now restart to load the system driver.",
+            nullptr);
+        request_app_restart_after_delay(800);
+    }
+}
+#endif
+
 void on_launcher_init(recompui::LauncherMenu *menu) {
     auto game_options_menu = menu->init_game_options_menu(
         supported_games[0].game_id,
@@ -616,8 +777,30 @@ void on_launcher_init(recompui::LauncherMenu *menu) {
 #define REGISTER_FUNC(name) recomp::overlays::register_base_export(#name, name)
 
 int main(int argc, char** argv) {
+#ifdef __ANDROID__
+    // Visibilidade de morte nativa ANTES de qualquer outra inicialização:
+    // SIGSEGV/SIGABRT/terminate passam a registrar a causa no logcat (tag
+    // DK64Recomp-Crash) antes do fluxo padrão de morte do Android — sem
+    // isto, um crash nativo ou uma exceção não capturada fecha o app sem
+    // nenhuma linha diagnosticável (relato "o app fecha sem nada no log").
+    androidport::crash::install();
+
+    // Diretórios do app passados pelo MainActivity (SDLActivity::getArguments()).
+    androidport::init_from_args(argc, argv);
+    // RT64::UserPaths::detectDataPath (src/common/rt64_user_paths.cpp do rt64)
+    // usa getenv("HOME") no branch __linux__ (também ativo no Android); sem HOME
+    // ele cai em getpwuid(getuid())->pw_dir, que retorna NULL para uid de app
+    // (desreferência -> crash na criação do RT64::Application). Apontar HOME p/
+    // o filesDir dá ao RT64 um dataPath gravável (filesDir/.config/rt64:
+    // rt64-imgui.ini, rt64.log, games/). O cwd do Android é "/", então nunca
+    // deixamos o RT64 resolver caminho por conta própria.
+    if (!androidport::internal_files_dir().empty()) {
+        SDL_setenv("HOME", androidport::internal_files_dir().c_str(), 1);
+    }
+#else
     (void)argc;
     (void)argv;
+#endif
     recomp::Version project_version{};
     if (!recomp::Version::from_string(version_string, project_version)) {
         ultramodern::error_handling::message_box(("Invalid version string: " + version_string).c_str());
@@ -677,7 +860,7 @@ int main(int argc, char** argv) {
     SDL_setenv("SDL_AUDIODRIVER", "wasapi", true);
 #endif
 
-#if defined(__linux__) && defined(RECOMP_FLATPAK)
+#if defined(__linux__) && defined(RECOMP_FLATPAK) && !defined(__ANDROID__)
     // When using Flatpak, applications tend to launch from the home directory by default.
     // Mods might use the current working directory to store the data, so we switch it to a directory
     // with persistent data storage and write permissions under Flatpak to ensure it works.
@@ -744,6 +927,55 @@ int main(int argc, char** argv) {
 
     banjo::init_config();
 
+#ifdef __ANDROID__
+    // Settings > Android Options: Shader, Shader Resolution, Shader parameters, an empty line, GPU Driver - each a
+    // button with what's in use beside it (android/patches/recompfrontend-option-buttons.patch). Shader Resolution's
+    // option itself is hidden; its button goes through Original, 2x and Full.
+    {
+        using recompui::config::OptionButton;
+        auto add = [](const char *label, std::function<void()> callback, std::function<std::string()> value, bool before,
+                      bool gap_before, std::function<void()> reset) {
+            OptionButton button;
+            button.label = label;
+            button.callback = std::move(callback);
+            button.value = std::move(value);
+            button.before = before;
+            button.gap_before = gap_before;
+            button.reset = std::move(reset);
+            recompui::config::add_option_button("shader_resolution", std::move(button));
+        };
+        static const char *const resolution_names[] = { "Original", "2x", "Full" };
+        auto resolution = []() -> uint32_t {
+            const auto value = recompui::config::get_config("android_options").get_option_value("shader_resolution");
+            const uint32_t *index = std::get_if<uint32_t>(&value);
+            return index != nullptr && *index < 3 ? *index : 0;
+        };
+        add("Shader...", []() { android_open_shader_menu(0); }, []() { return android_shader_name(); }, true, false,
+            []() { android_reset_shader(0); });
+        add("Shader Resolution", [resolution]() {
+                recomp::config::Config &config = recompui::config::get_config("android_options");
+                config.set_option_value("shader_resolution", (resolution() + 1) % 3);
+                config.save_config();
+            }, [resolution]() { return std::string(resolution_names[resolution()]); }, false, false, []() {
+                recomp::config::Config &config = recompui::config::get_config("android_options");
+                config.set_option_value("shader_resolution", 0u);
+                config.save_config();
+            });
+        add("Shader parameters...", []() { android_open_shader_menu(1); }, []() { return android_shader_params_summary(); },
+            false, false, []() { android_reset_shader(1); });
+        add("GPU Driver (Turnip)...", []() { show_android_gpu_driver_menu(); }, []() {
+                // the driver's name comes from a file: asked once a second
+                static std::string name;
+                static std::chrono::steady_clock::time_point asked;
+                const auto now = std::chrono::steady_clock::now();
+                if (name.empty() || now - asked > std::chrono::seconds(1)) {
+                    name = dk64driver::active_name();
+                    asked = now;
+                }
+                return name;
+            }, false, true, nullptr);
+    }
+#endif
     recompui::register_launcher_init_callback(on_launcher_init);
     recompui::register_launcher_update_callback(banjo::launcher_animation_update);
 
@@ -776,6 +1008,25 @@ int main(int argc, char** argv) {
         .set_rumble = recompinput::set_rumble,
         .get_connected_device_info = get_connected_device_info,
     };
+
+#ifdef __ANDROID__
+    // Touch buttons (TouchOverlay.java, android/native/compat/virtual_pad.cpp): the touch state is merged into
+    // controller 1's N64 input, and the Java side learns whether the game runs and whether a menu takes input.
+    input_callbacks.poll_input = []() {
+        recompinput::poll_inputs();
+        androidport::virtualpad::update_game_state(ultramodern::is_game_started(), recompinput::game_input_disabled());
+        // Settings > Graphics > Shader Resolution, to the shader pass (shaderpass/rt64)
+        const auto shader_resolution = recompui::config::get_config("android_options").get_option_value("shader_resolution");
+        if (const uint32_t* value = std::get_if<uint32_t>(&shader_resolution)) {
+            RT64::setShaderResolution(static_cast<int>(*value));
+        }
+    };
+    input_callbacks.get_input = [](int controller_num, uint16_t* buttons, float* x, float* y) {
+        bool ret = recompinput::profiles::get_n64_input(controller_num, buttons, x, y);
+        androidport::virtualpad::merge_input(controller_num, buttons, x, y);
+        return ret;
+    };
+#endif
 
     ultramodern::events::callbacks_t thread_callbacks{
         .vi_callback = recompinput::update_rumble,

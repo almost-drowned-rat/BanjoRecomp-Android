@@ -66,3 +66,15 @@ RSPRecomp
 
 # Controller mappings file
 gamecontrollerdb.txt
+
+# ===== Android port =====
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/.idea/
+*.apk
+*.aab
+# librashader, copied in by the local build
+android/app/src/main/jniLibs/

@@ -1,0 +1,196 @@
+--- a/recompui/include/recompui/config.h
++++ b/recompui/include/recompui/config.h
+@@ -2,6 +2,8 @@
+ #define _RECOMP_UI_CONFIG_H_
+ 
+ #include <vector>
++#include <functional>
++#include <string>
+ 
+ #include "librecomp/config.hpp"
+ #include "elements/ui_modal.h"
+@@ -154,6 +156,22 @@
+         recomp::config::Config &get_graphics_config();
+         recomp::config::Config &get_sound_config();
+ 
++        // A button shown with an option (by its id) on its options page: under it, or above it with `before`;
++        // `gap_before` leaves an empty line above it. `callback` runs when it's pressed (on the UI thread);
++        // `value`, if set, is shown beside the button and asked again every frame (keep it cheap).
++        struct OptionButton {
++            std::string label;
++            std::function<void()> callback;
++            std::function<std::string()> value;
++            bool before = false;
++            bool gap_before = false;
++            std::function<void()> reset;   // Y on a controller (Android): back to the default, if set
++        };
++        void add_option_button(const std::string &option_id, const std::string &label, std::function<void()> callback);
++        void add_option_button(const std::string &option_id, OptionButton button);
++        // The buttons of an option, in the order they were added (none: nullptr).
++        const std::vector<OptionButton> *get_option_buttons(const std::string &option_id);
++
+         // Internal use only.
+         void init_modal();
+     }
+--- a/recompui/src/config/ui_config.cpp
++++ b/recompui/src/config/ui_config.cpp
+@@ -29,6 +29,24 @@
+         throw std::runtime_error("Could not find config with ID '" + id + "'.");
+     }
+ 
++    static std::unordered_map<std::string, std::vector<config::OptionButton>> option_buttons;
++
++    void config::add_option_button(const std::string &option_id, const std::string &label, std::function<void()> callback) {
++        config::OptionButton button;
++        button.label = label;
++        button.callback = std::move(callback);
++        add_option_button(option_id, std::move(button));
++    }
++
++    void config::add_option_button(const std::string &option_id, config::OptionButton button) {
++        option_buttons[option_id].push_back(std::move(button));
++    }
++
++    const std::vector<config::OptionButton> *config::get_option_buttons(const std::string &option_id) {
++        auto it = option_buttons.find(option_id);
++        return it != option_buttons.end() ? &it->second : nullptr;
++    }
++
+     static recomp::config::Config *get_config_ptr(const std::string &id) {
+         for (auto &[config_id, config] : configs) {
+             if (config_id == id) {
+--- a/recompui/src/config/ui_config_page_options_menu.cpp
++++ b/recompui/src/config/ui_config_page_options_menu.cpp
+@@ -1,8 +1,109 @@
+ #include "ui_config_page_options_menu.h"
++#include "recompui/config.h"
++#include "elements/ui_button.h"
++#include "elements/ui_label.h"
++#include "RmlUi/Core/Element.h"
++#include <unordered_map>
+ 
+ 
+ namespace recompui {
+ 
++    // The value beside an option button (config::OptionButton::value), asked again every frame.
++    class OptionButtonValue : public Label {
++        std::function<std::string()> value;
++        std::string shown;
++    protected:
++        std::string_view get_type_name() override { return "OptionButtonValue"; }
++        void process_event(const Event &e) override {
++            if (e.type == EventType::Update) {
++                std::string now = value();
++                if (now != shown) {
++                    shown = now;
++                    set_text(shown);
++                }
++                queue_update();
++            }
++        }
++    public:
++        OptionButtonValue(ResourceId rid, Element *parent, std::function<std::string()> value)
++            : Label(rid, parent, LabelStyle::Normal), value(std::move(value)) {
++            shown = this->value();
++            set_text(shown);
++            queue_update();
++        }
++    };
++
++    // Y on a controller (Android) puts the focused option back to its default: an option's (and a button's) element
++    // carries the key of its reset action (attribute data-reset); ui_state.cpp looks it up from the focused element
++    // upwards. Element::set_attribute is protected: reached through a class derived from Element.
++    struct ElementAttribute : Element {
++        static void set(Element *element, const Rml::String &key, const Rml::String &value) {
++            (element->*(&ElementAttribute::set_attribute))(key, value);
++        }
++    };
++    static std::unordered_map<std::string, std::function<void()>> reset_actions;
++    static void set_reset_action(Element *element, std::function<void()> action) {
++        static int next_key = 0;
++        std::string key = std::to_string(++next_key);
++        reset_actions[key] = std::move(action);
++        ElementAttribute::set(element, "data-reset", key);
++    }
++
++    static void reset_option_to_default(recomp::config::Config *config, const std::string &option_id) {
++        const recomp::config::ConfigOption &option = config->get_option(option_id);
++        recomp::config::ConfigValueVariant value;
++        if (const auto *e = std::get_if<recomp::config::ConfigOptionEnum>(&option.variant)) value = e->default_value;
++        else if (const auto *n = std::get_if<recomp::config::ConfigOptionNumber>(&option.variant)) value = n->default_value;
++        else if (const auto *s = std::get_if<recomp::config::ConfigOptionString>(&option.variant)) value = s->default_value;
++        else if (const auto *b = std::get_if<recomp::config::ConfigOptionBool>(&option.variant)) value = b->default_value;
++        else return;
++        config->update_option_value(option_id, value);
++    }
++
++    bool reset_focused_option(Rml::Element *focused) {
++        for (Rml::Element *e = focused; e != nullptr; e = e->GetParentNode()) {
++            if (const Rml::Variant *key = e->GetAttribute("data-reset")) {
++                auto it = reset_actions.find(key->Get<Rml::String>());
++                if (it != reset_actions.end()) {
++                    it->second();
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    static void add_option_buttons(ContextId context, Element *parent, const std::string &option_id, bool before) {
++        const std::vector<config::OptionButton> *option_buttons = recompui::config::get_option_buttons(option_id);
++        if (option_buttons == nullptr) {
++            return;
++        }
++        for (const config::OptionButton &option_button : *option_buttons) {
++            if (option_button.before != before) {
++                continue;
++            }
++            Element *row = context.create_element<Element>(parent);
++            row->set_display(Display::Flex);
++            row->set_flex_direction(FlexDirection::Row);
++            row->set_align_items(AlignItems::Center);
++            row->set_margin_bottom(16.0f);
++            if (option_button.gap_before) {
++                row->set_margin_top(56.0f);
++            }
++            if (option_button.reset) {
++                set_reset_action(row, option_button.reset);
++            }
++            Button *button = context.create_element<Button>(row, option_button.label, ButtonStyle::Secondary, ButtonSize::Large);
++            button->set_width(480.0f);
++            std::function<void()> callback = option_button.callback;
++            button->add_pressed_callback([callback]() { callback(); });
++            if (option_button.value) {
++                Element *value = context.create_element<OptionButtonValue>(row, option_button.value);
++                value->set_margin_left(32.0f);
++            }
++        }
++    }
++
+ ConfigPageOptionsMenu::ConfigPageOptionsMenu(
+     ResourceId rid,
+     Element *parent,
+@@ -183,6 +284,7 @@
+         auto schema = config->get_config_schema();
+         for (size_t i = 0; i < schema.options.size(); i++) {
+             auto &config_option = schema.options[i];
++            add_option_buttons(context, body_left_scroll, config_option.id, true);
+             ConfigOptionElement *element = nullptr;
+             switch (config_option.type) {
+                 case recomp::config::ConfigOptionType::Enum: {
+@@ -235,7 +337,14 @@
+             };
+             element->update_disabled();
+             element->update_hidden();
++            {
++                recomp::config::Config *option_config = config;
++                std::string option_id = config_option.id;
++                set_reset_action(element, [option_config, option_id]() { reset_option_to_default(option_config, option_id); });
++            }
+             config_option_elements.push_back(element);
++
++            add_option_buttons(context, body_left_scroll, config_option.id, false);
+         }
+     }
+ }
