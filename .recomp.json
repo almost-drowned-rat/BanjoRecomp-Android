@@ -1,0 +1,38 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Banjo-Kazooie",
+  "wikidata": "Q129000",
+  "system": "N64",
+  "type": "recomp",
+  "project": "Banjo: Recompiled - Android",
+  "status": "released",
+  "targets": [
+    "Android"
+  ],
+  "original": {
+    "region": "USA",
+    "revision": "1.0",
+    "sha1": "1fe1632098865f639e22c11b9a81ee8f29c75d7a"
+  },
+  "toolchain": [
+    "N64Recomp",
+    "RT64"
+  ],
+  "maintainers": [
+    {
+      "name": "almost-drowned-rat",
+      "link": "https://github.com/almost-drowned-rat"
+    }
+  ],
+  "links": [
+    {
+      "label": "Banjo: Recompiled (main project)",
+      "url": "https://github.com/BanjoRecomp/BanjoRecomp"
+    },
+    {
+      "label": "Banjo-Kazooie decompilation",
+      "url": "https://gitlab.com/banjo.decomp/banjo-kazooie"
+    }
+  ],
+  "notes": "Android version of Banjo: Recompiled, a fork of it (branch android). Not a project of the Banjo: Recompiled team; made with AI assistance."
+}
