@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon_256.png" alt="Banjo: Recompiled for Android" width="160">
+</p>
+
 # Banjo: Recompiled — Android
 
 The Android version of [Banjo: Recompiled](https://github.com/BanjoRecomp/BanjoRecomp): Banjo-Kazooie, statically
