@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "banjo_config.h"
 #include "recompui/recompui.h"
 #include "recompui/config.h"
@@ -246,6 +247,102 @@ banjo::CutsceneAspectRatioMode banjo::get_cutscene_aspect_ratio_mode() {
     return get_graphics_config_enum_value<banjo::CutsceneAspectRatioMode>(banjo::configkeys::graphics::cutscene_aspect_ratio_mode);
 }
 
+#ifdef __ANDROID__
+// The Android card menu (the same in all N64 ports: General, the game's own areas, Graphics, Shaders, Audio,
+// Controls, Mods). The configs stay as they are (saved settings keep their files); their own tabs are hidden.
+recompui::config::MenuCardEntry android_driver_card();   // src/main/main.cpp
+
+static void create_android_card_tabs() {
+    using namespace recompui::config;
+    namespace gk = banjo::configkeys::general;
+    set_java_menu_class("io.github.almostdrownedrat.banjo.TouchControls");
+    set_menu_accent(31, 99, 194);   // the start screen's colour (the blue sky)
+    create_card_tab("General", "card_general", []() {
+        std::vector<MenuCardEntry> l;
+        l.push_back(header_card("Session"));
+        MenuCardEntry back;
+        back.label = "Back to game";
+        back.run = []() { recompui::config::close(); };
+        l.push_back(back);
+        for (auto &e : java_menu_cards("game")) l.push_back(e);                 // Exit game
+        l.push_back(header_card("Gameplay"));
+        l.push_back(option_card(general::id, gk::note_saving_mode));
+        l.push_back(header_card("Input"));
+        l.push_back(option_card(general::id, general::options::background_input_mode));
+        return l;
+    });
+    create_card_tab("Camera", "card_camera", []() {
+        return std::vector<MenuCardEntry>{
+            header_card("Camera"),
+            option_card(general::id, gk::analog_cam_mode),
+            option_card(general::id, gk::analog_camera_sensitivity),
+            header_card("Invert"),
+            option_card(general::id, gk::third_person_camera_invert_mode),
+            option_card(general::id, gk::first_person_invert_mode),
+            option_card(general::id, gk::flying_and_swimming_invert_mode),
+        };
+    });
+    create_card_tab("Graphics", "card_graphics", []() {
+        namespace go = graphics::options;
+        std::vector<MenuCardEntry> l;
+        std::vector<std::string> used;
+        auto add = [&](const std::string &id) {
+            l.push_back(option_card(graphics::id, id));
+            used.push_back(id);
+        };
+        l.push_back(header_card("Picture"));
+        add(go::res_option);
+        add(go::ar_option);
+        add(go::hr_option);
+        add(banjo::configkeys::graphics::cutscene_aspect_ratio_mode);
+        l.push_back(header_card("Quality"));
+        add(go::ds_option);
+        add(go::msaa_option);
+        // any other option of the graphics config (shown only where it isn't hidden)
+        auto schema = get_config(graphics::id).get_config_schema();
+        for (auto &o : schema.options) {
+            if (o.id != go::rr_option && o.id != go::rr_manual_value &&
+                std::find(used.begin(), used.end(), o.id) == used.end()) {
+                add(o.id);
+            }
+        }
+        l.push_back(header_card("Frame rate"));
+        add(go::rr_option);
+        add(go::rr_manual_value);
+        for (auto &e : java_menu_cards("display")) l.push_back(e);              // FPS
+        l.push_back(header_card("Driver"));
+        l.push_back(android_driver_card());
+        return l;
+    }, graphics::id);
+    create_card_tab("Shaders", "card_shaders", []() {
+        std::vector<MenuCardEntry> l;
+        l.push_back(header_card("RetroArch shaders"));
+        for (auto &e : java_menu_cards("shader")) l.push_back(e);
+        l.push_back(header_card("Picture"));
+        MenuCardEntry res = option_card("android_options", "shader_resolution");
+        res.hidden = nullptr;                                                     // hidden as an option of its own tab
+        l.push_back(res);
+        return l;
+    });
+    create_card_tab("Audio", "card_sound", []() {
+        std::vector<MenuCardEntry> l;
+        l.push_back(header_card("Volume"));
+        for (auto &e : config_cards(sound::id)) l.push_back(e);
+        return l;
+    });
+    create_card_tab("Controls", "card_controls", []() {
+        std::vector<MenuCardEntry> l;
+        l.push_back(header_card("Controller"));
+        l.push_back(bindings_card());
+        l.push_back(option_card(general::id, general::options::joystick_deadzone));
+        l.push_back(option_card(general::id, general::options::rumble_strength));
+        l.push_back(header_card("Touch controls"));
+        for (auto &e : java_menu_cards("touch")) l.push_back(e);
+        return l;
+    });
+}
+#endif
+
 void banjo::init_config() {
     std::filesystem::path recomp_dir = recompui::file::get_app_folder_path();
 
@@ -298,7 +395,23 @@ void banjo::init_config() {
     auto &sound_config = recompui::config::create_sound_tab();
     add_sound_options(sound_config);
 
+#ifdef __ANDROID__
+    for (const std::string &id : { recompui::config::general::id, recompui::config::graphics::id, std::string("android_options"),
+                                   recompui::config::controls::id, recompui::config::sound::id }) {
+        recompui::config::set_tab_visible(id, false);
+    }
+    create_android_card_tabs();
+#endif
     recompui::config::create_mods_tab();
+#ifdef __ANDROID__
+    recompui::config::set_tab_visible(recompui::config::mods::id, false);
+    recompui::config::create_card_tab("Mods", "card_mods", []() {
+        std::vector<recompui::config::MenuCardEntry> l;
+        l.push_back(recompui::config::header_card("Mods"));
+        for (auto &e : recompui::config::mods_cards()) l.push_back(e);
+        return l;
+    });
+#endif
 
     recompui::config::finalize();
 
