@@ -1,0 +1,12 @@
+diff --git a/librecomp/include/librecomp/game.hpp b/librecomp/include/librecomp/game.hpp
+index 7f1533e..b587f0f 100644
+--- a/librecomp/include/librecomp/game.hpp
++++ b/librecomp/include/librecomp/game.hpp
+@@ -24,6 +24,7 @@ namespace recomp {
+         std::string display_name;
+         std::u8string game_id;
+         std::string mod_game_id;
++        std::string discovery_url;   // Android port: the mod list Settings > Mods > Find mods reads
+         SaveType save_type = SaveType::None;
+         std::span<const char> thumbnail_bytes;
+         bool is_enabled;

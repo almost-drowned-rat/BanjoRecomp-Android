@@ -67,7 +67,9 @@ The sections:
 - **Shaders**, **Audio**
 - **Controls** — Button mapping, deadzone, rumble; the touch buttons (mode, move and resize, size, single buttons,
   opacity, stick sensitivity, reset)
-- **Mods** — Manage mods (before the game starts). In the game, **Install / switch mods (restart)** restarts the
+- **Mods** — Manage mods and Find mods (before the game starts): Find mods lists the mods of
+  [Thunderstore](https://thunderstore.io/c/banjo-recompiled/) with their pictures and installs them (and what they
+  need) with one tap (the app uses the internet only for this). In the game, **Install / switch mods (restart)** restarts the
   app to the start screen, where mods are installed and turned on or off.
 
 There are no window mode options (always full screen).

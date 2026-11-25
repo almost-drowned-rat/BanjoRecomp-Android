@@ -1,5 +1,7 @@
 #include <algorithm>
 #include "banjo_config.h"
+#include "composites/ui_mod_discovery.h"
+#include "ultramodern/ultramodern.hpp"
 #include "recompui/recompui.h"
 #include "recompui/config.h"
 #include "recompinput/recompinput.h"
@@ -405,6 +407,9 @@ void banjo::init_config() {
     recompui::config::create_mods_tab();
 #ifdef __ANDROID__
     recompui::config::set_tab_visible(recompui::config::mods::id, false);
+    if (!recompui::get_discovery_url().empty() && !ultramodern::is_game_started()) {
+        recompui::config::set_tab_visible(recompui::config::mod_discovery::id, false);
+    }
     recompui::config::create_card_tab("Mods", "card_mods", []() {
         std::vector<recompui::config::MenuCardEntry> l;
         l.push_back(recompui::config::header_card("Mods"));

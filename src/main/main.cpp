@@ -421,6 +421,10 @@ std::vector<recomp::GameEntry> supported_games = {
         .display_name = "Banjo-Kazooie",
         .game_id = u8"bk.n64.us.1.0",
         .mod_game_id = "bk",
+#ifdef __ANDROID__
+        // Settings > Mods > Find mods: the Banjo: Recompiled mods on Thunderstore
+        .discovery_url = "https://thunderstore.io/c/banjo-recompiled/api/v1/package/",
+#endif
         // Eep16k instead of Eep4k to have room for extra save file data.
         .save_type = recomp::SaveType::Eep16k,
         .thumbnail_bytes = std::span<const char>(icon_bytes),
